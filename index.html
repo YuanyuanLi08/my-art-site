@@ -1,29 +1,875 @@
-HTML
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yuanyuan Li Art</title>
-    <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f4f4f4; }
-        .container { text-align: center; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        button { padding: 10px 20px; cursor: pointer; background-color: #000; color: #fff; border: none; border-radius: 4px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grid Coordinates Art Space</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #ffffff;
+      --ink: #111111;
+      --muted: #8f8f8f;
+      --line: #1a1a1a;
+      --gallery-w: min(84vw, 1260px);
+      --gallery-h: min(82vh, 860px);
+      --dur: 420ms;
+      --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Space Grotesk", "Avenir Next", "Helvetica Neue", sans-serif;
+      overflow: hidden;
+    }
+
+    .app {
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      position: relative;
+      isolation: isolate;
+    }
+
+    .desktop-block {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: clamp(1rem, 2vw, 1.5rem);
+      letter-spacing: 0.02em;
+      z-index: 50;
+      padding: 2rem;
+    }
+
+    .desktop-block.active {
+      display: flex;
+    }
+
+    .stage {
+      width: var(--gallery-w);
+      height: var(--gallery-h);
+      border: 1px solid rgba(20, 20, 20, 0.22);
+      background: #fff;
+      position: relative;
+      overflow: hidden;
+      transform: translateZ(0);
+    }
+
+    .view {
+      position: absolute;
+      inset: 0;
+      padding: clamp(20px, 3vw, 38px);
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.98);
+      transition: opacity 260ms ease, transform 260ms ease;
+      background: #fff;
+    }
+
+    .view.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: scale(1);
+    }
+
+    .grid {
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--line);
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+    }
+
+    .grid::before,
+    .grid::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-repeat: no-repeat;
+    }
+
+    .grid::before {
+      background-image:
+        linear-gradient(var(--line), var(--line)),
+        linear-gradient(var(--line), var(--line)),
+        linear-gradient(var(--line), var(--line)),
+        linear-gradient(var(--line), var(--line)),
+        linear-gradient(var(--line), var(--line)),
+        linear-gradient(var(--line), var(--line));
+      background-size:
+        1px 100%,
+        1px 100%,
+        1px 100%,
+        100% 1px,
+        100% 1px,
+        100% 1px;
+      background-position:
+        25% 0,
+        50% 0,
+        75% 0,
+        0 25%,
+        0 50%,
+        0 75%;
+      opacity: 0.3;
+    }
+
+    .l1-cell,
+    .l2-cell {
+      position: absolute;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 180ms ease, border-color 180ms ease;
+      user-select: none;
+      color: #171717;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .l1-cell:hover,
+    .l2-cell:hover {
+      background: rgba(10, 10, 10, 0.06);
+      border-color: rgba(10, 10, 10, 0.25);
+    }
+
+    .axis-label {
+      position: absolute;
+      color: var(--muted);
+      font-size: 0.84rem;
+      letter-spacing: 0.08em;
+      font-weight: 500;
+      pointer-events: none;
+    }
+
+    .axis-label.row {
+      left: -30px;
+    }
+
+    .axis-label.col {
+      top: -24px;
+    }
+
+    .back {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      border: 1px solid rgba(10, 10, 10, 0.35);
+      background: #fff;
+      color: #111;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      z-index: 20;
+      display: none;
+    }
+
+    .back.visible {
+      display: inline-block;
+    }
+
+    .title {
+      position: absolute;
+      right: 18px;
+      top: 14px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      z-index: 8;
+      text-transform: uppercase;
+    }
+
+    .l3-shell {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 14px;
+    }
+
+    .mode-switch {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .mode-btn {
+      border: 1px solid rgba(10, 10, 10, 0.3);
+      background: #fff;
+      color: #111;
+      font: inherit;
+      font-size: 0.78rem;
+      padding: 6px 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+    }
+
+    .mode-btn.active {
+      background: #111;
+      color: #fff;
+    }
+
+    .loop-panel {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border: 1px solid rgba(20, 20, 20, 0.2);
+      background: #fff;
+    }
+
+    .h-track {
+      height: 100%;
+      display: flex;
+      transition: transform 380ms var(--ease);
+      touch-action: pan-y;
+    }
+
+    .h-slide {
+      flex: 0 0 100%;
+      display: grid;
+      place-items: center;
+      padding: 36px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .art-card {
+      width: min(76%, 620px);
+      max-height: 78%;
+      border: 1px solid rgba(15, 15, 15, 0.18);
+      background: #f8f8f8;
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .art-card img,
+    .art-card video {
+      width: 100%;
+      height: clamp(220px, 52vh, 420px);
+      object-fit: contain;
+      background: #ececec;
+    }
+
+    .meta {
+      font-size: 0.92rem;
+      line-height: 1.4;
+      display: grid;
+      gap: 4px;
+    }
+
+    .h-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 1px solid rgba(20, 20, 20, 0.3);
+      background: #fff;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      z-index: 4;
+      font-size: 1rem;
+    }
+
+    .h-arrow.prev {
+      left: 10px;
+    }
+
+    .h-arrow.next {
+      right: 10px;
+    }
+
+    .v-scroll {
+      height: 100%;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+      padding: 18px;
+    }
+
+    .v-list {
+      display: grid;
+      gap: 20px;
+    }
+
+    .v-item {
+      min-height: 74%;
+      border: 1px solid rgba(10, 10, 10, 0.2);
+      background: #fafafa;
+      padding: 20px;
+      display: grid;
+      gap: 12px;
+      cursor: pointer;
+    }
+
+    .v-item img,
+    .v-item video {
+      width: 100%;
+      height: clamp(280px, 56vh, 480px);
+      object-fit: contain;
+      background: #ececec;
+    }
+
+    .zoom-ghost {
+      position: fixed;
+      border: 1px solid rgba(20, 20, 20, 0.22);
+      background: #fff;
+      z-index: 60;
+      pointer-events: none;
+      transform-origin: center center;
+      transition: all var(--dur) var(--ease);
+    }
+
+    .modal {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      background: rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(5px);
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-card {
+      width: min(78vw, 900px);
+      max-height: 90%;
+      overflow: auto;
+      background: #fff;
+      border: 1px solid rgba(20, 20, 20, 0.35);
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      position: relative;
+    }
+
+    .modal-card img,
+    .modal-card video {
+      width: 100%;
+      max-height: 72vh;
+      object-fit: contain;
+      background: #f1f1f1;
+    }
+
+    .close {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      border: 1px solid rgba(20, 20, 20, 0.3);
+      background: #fff;
+      cursor: pointer;
+      padding: 4px 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.74rem;
+    }
+
+    .hint {
+      position: absolute;
+      bottom: 12px;
+      left: 18px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+  </style>
 </head>
 <body>
+  <div class="app">
+    <div class="desktop-block" id="mobileBlock">Please view this site on a Desktop for the best experience.</div>
+    <button class="back" id="backBtn">Back</button>
+    <div class="title" id="pathTitle">L1 Overview</div>
 
-    <div class="container">
-        <h1>Yuanyuan Li</h1>
-        <p>这bububububu是我的作品集测试页面</p>
-        <button onclick="showAlert()">点击查看作品说明</button>
-    </div>
+    <main class="stage" id="stage">
+      <section class="view active" id="viewL1">
+        <div class="grid" id="l1Grid"></div>
+        <div class="hint">Click a coordinate tile to zoom in.</div>
+      </section>
 
-    <script>
-        function showAlert() {
-            alert("作品序列号: #001\n这是你未来可以自行修改的文字对话框内容。");
+      <section class="view" id="viewL2">
+        <div class="grid" id="l2Grid"></div>
+        <div class="hint">Index layer. Press Esc to go back.</div>
+      </section>
+
+      <section class="view" id="viewL3">
+        <div class="l3-shell">
+          <div class="mode-switch">
+            <button class="mode-btn active" data-mode="horizontal">Mode A · Horizontal</button>
+            <button class="mode-btn" data-mode="vertical">Mode B · Vertical</button>
+          </div>
+          <div class="loop-panel" id="l3Panel"></div>
+        </div>
+      </section>
+
+      <div class="modal" id="artModal">
+        <article class="modal-card" id="modalCard"></article>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      level: 1,
+      selectedL1: null,
+      selectedL2: null,
+      l3Mode: "horizontal",
+      hIndex: 1,
+      vReady: false,
+      triggerRects: {
+        2: null,
+        3: null
+      }
+    };
+
+    const stage = document.getElementById("stage");
+    const backBtn = document.getElementById("backBtn");
+    const pathTitle = document.getElementById("pathTitle");
+    const viewL1 = document.getElementById("viewL1");
+    const viewL2 = document.getElementById("viewL2");
+    const viewL3 = document.getElementById("viewL3");
+    const l1Grid = document.getElementById("l1Grid");
+    const l2Grid = document.getElementById("l2Grid");
+    const l3Panel = document.getElementById("l3Panel");
+    const mobileBlock = document.getElementById("mobileBlock");
+    const modal = document.getElementById("artModal");
+    const modalCard = document.getElementById("modalCard");
+
+    const l1Cells = [
+      { id: 1, x: 3, y: 2, w: 21, h: 20, label: "I..I" },
+      { id: 2, x: 25, y: 2, w: 22, h: 20, label: "1" },
+      { id: 3, x: 48, y: 2, w: 22, h: 20, label: "2" },
+      { id: 4, x: 71, y: 2, w: 25, h: 20, label: "3" },
+      { id: 5, x: 25, y: 23, w: 45, h: 22, label: "5" },
+      { id: 6, x: 3, y: 23, w: 21, h: 22, label: "6" },
+      { id: 7, x: 48, y: 46, w: 22, h: 20, label: "7" },
+      { id: 8, x: 71, y: 46, w: 12, h: 20, label: "8" },
+      { id: 9, x: 84, y: 46, w: 12, h: 20, label: "9" },
+      { id: 10, x: 25, y: 69, w: 22, h: 24, label: "10" },
+      { id: 11, x: 48, y: 69, w: 22, h: 24, label: "11" },
+      { id: 12, x: 71, y: 69, w: 25, h: 24, label: "12" }
+    ];
+
+    const seriesMap = Object.fromEntries(
+      l1Cells.map((cell, idx) => {
+        const base = `L1.${String(cell.id).padStart(2, "0")}`;
+        return [
+          cell.id,
+          {
+            title: `${base}`,
+            index: Array.from({ length: 6 }, (_, i) => ({
+              id: `${base}.${i + 1}`,
+              label: `${i + 1}`,
+              mode: (idx + i) % 2 === 0 ? "horizontal" : "vertical",
+              works: buildWorks(base, i + 1)
+            }))
+          }
+        ];
+      })
+    );
+
+    function buildWorks(base, step) {
+      return [
+        {
+          id: `${base}.${step}.A`,
+          title: `No Straight Line #${step}`,
+          year: "2026",
+          medium: "Works on Paper",
+          size: "40cm x 40cm",
+          type: "image",
+          src: `https://picsum.photos/seed/${encodeURIComponent(base + step + "a")}/1200/1200`
+        },
+        {
+          id: `${base}.${step}.B`,
+          title: `Drift Study #${step}`,
+          year: "2026",
+          medium: "Single Channel Video",
+          size: "00:30",
+          type: "video",
+          src: "https://www.w3schools.com/html/mov_bbb.mp4"
+        },
+        {
+          id: `${base}.${step}.C`,
+          title: `Breath Line #${step}`,
+          year: "2026",
+          medium: "Audio Sketch",
+          size: "02:13",
+          type: "audio",
+          src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+        },
+        {
+          id: `${base}.${step}.D`,
+          title: `Grid Echo #${step}`,
+          year: "2026",
+          medium: "Works on Paper",
+          size: "60cm x 45cm",
+          type: "image",
+          src: `https://picsum.photos/seed/${encodeURIComponent(base + step + "d")}/1200/900`
         }
-    </script>
+      ];
+    }
+
+    function renderAxis(grid) {
+      const rowMarks = ["I", "II", "III", "IV"];
+      const colMarks = ["I", "II", "III", "IV"];
+
+      rowMarks.forEach((r, i) => {
+        const el = document.createElement("div");
+        el.className = "axis-label row";
+        el.textContent = r;
+        el.style.top = `${12 + i * 25}%`;
+        grid.appendChild(el);
+      });
+
+      colMarks.forEach((c, i) => {
+        const el = document.createElement("div");
+        el.className = "axis-label col";
+        el.textContent = c;
+        el.style.left = `${12 + i * 25}%`;
+        grid.appendChild(el);
+      });
+    }
+
+    function renderL1() {
+      l1Grid.innerHTML = "";
+      renderAxis(l1Grid);
+      l1Cells.forEach((cell) => {
+        const tile = document.createElement("button");
+        tile.className = "l1-cell";
+        tile.type = "button";
+        tile.textContent = cell.label;
+        tile.style.left = `${cell.x}%`;
+        tile.style.top = `${cell.y}%`;
+        tile.style.width = `${cell.w}%`;
+        tile.style.height = `${cell.h}%`;
+        tile.dataset.id = String(cell.id);
+        tile.addEventListener("click", () => {
+          state.selectedL1 = cell.id;
+          state.triggerRects[2] = tile.getBoundingClientRect();
+          renderL2(cell.id);
+          transitionTo(2, state.triggerRects[2]);
+        });
+        l1Grid.appendChild(tile);
+      });
+    }
+
+    function renderL2(groupId) {
+      l2Grid.innerHTML = "";
+      renderAxis(l2Grid);
+      const data = seriesMap[groupId];
+      data.index.forEach((entry, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const tile = document.createElement("button");
+        tile.className = "l2-cell";
+        tile.type = "button";
+        tile.textContent = `${data.title}.${entry.label}`;
+        tile.style.left = `${5 + col * 31}%`;
+        tile.style.top = `${18 + row * 34}%`;
+        tile.style.width = "28%";
+        tile.style.height = "28%";
+        tile.dataset.sub = entry.id;
+        tile.addEventListener("click", () => {
+          state.selectedL2 = entry.id;
+          state.l3Mode = entry.mode;
+          state.triggerRects[3] = tile.getBoundingClientRect();
+          renderL3(entry);
+          transitionTo(3, state.triggerRects[3]);
+        });
+        l2Grid.appendChild(tile);
+      });
+    }
+
+    function mediaPreview(work) {
+      if (work.type === "image") {
+        return `<img src="${work.src}" alt="${work.title}" loading="lazy" />`;
+      }
+      if (work.type === "video") {
+        return `<video src="${work.src}" muted playsinline></video>`;
+      }
+      return `
+        <div style="height:clamp(220px,52vh,420px);display:grid;place-items:center;background:#f0f0f0;border:1px solid rgba(15,15,15,.1)">
+          <audio controls preload="none" src="${work.src}" style="width:min(90%,560px)"></audio>
+        </div>`;
+    }
+
+    function metaTemplate(work, prefix = "") {
+      return `
+        <div class="meta">
+          <strong>${prefix}${work.title}</strong>
+          <span>${work.medium}</span>
+          <span>${work.year}</span>
+          <span>${work.size}</span>
+        </div>`;
+    }
+
+    function renderL3(entry) {
+      const modeButtons = document.querySelectorAll(".mode-btn");
+      modeButtons.forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.mode === state.l3Mode);
+        btn.onclick = () => {
+          state.l3Mode = btn.dataset.mode;
+          modeButtons.forEach((b) => b.classList.toggle("active", b === btn));
+          renderL3Content(entry);
+        };
+      });
+      renderL3Content(entry);
+    }
+
+    function renderL3Content(entry) {
+      pathTitle.textContent = `${entry.id} · L3 Detail`;
+      if (state.l3Mode === "horizontal") {
+        renderHorizontalLoop(entry.works);
+      } else {
+        renderVerticalLoop(entry.works);
+      }
+    }
+
+    function renderHorizontalLoop(works) {
+      l3Panel.innerHTML = "";
+      l3Panel.onwheel = null;
+      const prev = document.createElement("button");
+      prev.className = "h-arrow prev";
+      prev.type = "button";
+      prev.textContent = "←";
+
+      const next = document.createElement("button");
+      next.className = "h-arrow next";
+      next.type = "button";
+      next.textContent = "→";
+
+      const track = document.createElement("div");
+      track.className = "h-track";
+      const buffer = [works[works.length - 1], ...works, works[0]];
+      state.hIndex = 1;
+
+      buffer.forEach((work) => {
+        const slide = document.createElement("article");
+        slide.className = "h-slide";
+        slide.innerHTML = `
+          <div class="art-card">
+            ${mediaPreview(work)}
+            ${metaTemplate(work)}
+          </div>`;
+        slide.addEventListener("click", () => openModal(work));
+        track.appendChild(slide);
+      });
+
+      function update(animated = true) {
+        track.style.transition = animated ? "transform 380ms var(--ease)" : "none";
+        track.style.transform = `translateX(-${state.hIndex * 100}%)`;
+      }
+
+      function step(dir) {
+        state.hIndex += dir;
+        update(true);
+      }
+
+      track.addEventListener("transitionend", () => {
+        if (state.hIndex === 0) {
+          state.hIndex = works.length;
+          update(false);
+        }
+        if (state.hIndex === works.length + 1) {
+          state.hIndex = 1;
+          update(false);
+        }
+      });
+
+      l3Panel.onwheel = (event) => {
+        event.preventDefault();
+        step(event.deltaY > 0 ? 1 : -1);
+      };
+
+      prev.onclick = () => step(-1);
+      next.onclick = () => step(1);
+
+      l3Panel.append(prev, track, next);
+      update(false);
+    }
+
+    function renderVerticalLoop(works) {
+      l3Panel.innerHTML = `
+        <div class="v-scroll" id="vScroll">
+          <div class="v-list" id="vList"></div>
+        </div>`;
+      l3Panel.onwheel = null;
+
+      const vScroll = document.getElementById("vScroll");
+      const vList = document.getElementById("vList");
+
+      const chunk = [...works, ...works, ...works];
+      chunk.forEach((work, i) => {
+        const prefix = `#${(i % works.length) + 1} · `;
+        const item = document.createElement("article");
+        item.className = "v-item";
+        item.innerHTML = `
+          ${mediaPreview(work)}
+          ${metaTemplate(work, prefix)}`;
+        item.addEventListener("click", () => openModal(work));
+        vList.appendChild(item);
+      });
+
+      requestAnimationFrame(() => {
+        const oneSetHeight = vList.scrollHeight / 3;
+        vScroll.scrollTop = oneSetHeight;
+
+        vScroll.onscroll = () => {
+          if (vScroll.scrollTop <= oneSetHeight * 0.2) {
+            vScroll.scrollTop += oneSetHeight;
+          }
+          if (vScroll.scrollTop >= oneSetHeight * 1.8) {
+            vScroll.scrollTop -= oneSetHeight;
+          }
+        };
+      });
+    }
+
+    function openModal(work) {
+      modalCard.innerHTML = `
+        <button class="close" type="button" id="closeModal">Close</button>
+        ${work.type === "image" ? `<img src="${work.src}" alt="${work.title}" />` : ""}
+        ${work.type === "video" ? `<video controls autoplay src="${work.src}"></video>` : ""}
+        ${work.type === "audio" ? `<audio controls autoplay src="${work.src}" style="width:100%"></audio>` : ""}
+        ${metaTemplate(work)}
+      `;
+      modal.classList.add("active");
+      document.getElementById("closeModal").onclick = closeModal;
+    }
+
+    function closeModal() {
+      modal.classList.remove("active");
+      modalCard.innerHTML = "";
+    }
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeModal();
+    });
+
+    function switchLevel(level) {
+      state.level = level;
+      [viewL1, viewL2, viewL3].forEach((view, index) => {
+        view.classList.toggle("active", index + 1 === level);
+      });
+
+      backBtn.classList.toggle("visible", level > 1);
+      if (level === 1) pathTitle.textContent = "L1 Overview";
+      if (level === 2) pathTitle.textContent = `${seriesMap[state.selectedL1].title} · L2 Index`;
+    }
+
+    function transitionTo(level, fromRect) {
+      const toRect = stage.getBoundingClientRect();
+      if (!fromRect) {
+        switchLevel(level);
+        return;
+      }
+
+      const ghost = document.createElement("div");
+      ghost.className = "zoom-ghost";
+      ghost.style.left = `${fromRect.left}px`;
+      ghost.style.top = `${fromRect.top}px`;
+      ghost.style.width = `${fromRect.width}px`;
+      ghost.style.height = `${fromRect.height}px`;
+      document.body.appendChild(ghost);
+
+      requestAnimationFrame(() => {
+        ghost.style.left = `${toRect.left}px`;
+        ghost.style.top = `${toRect.top}px`;
+        ghost.style.width = `${toRect.width}px`;
+        ghost.style.height = `${toRect.height}px`;
+      });
+
+      setTimeout(() => {
+        switchLevel(level);
+      }, 220);
+
+      ghost.addEventListener("transitionend", () => ghost.remove(), { once: true });
+    }
+
+    function zoomBack() {
+      if (state.level === 1) return;
+      closeModal();
+
+      const fromRect = stage.getBoundingClientRect();
+      const nextLevel = state.level - 1;
+      const toRect = state.triggerRects[state.level];
+
+      if (!toRect) {
+        switchLevel(nextLevel);
+        return;
+      }
+
+      const ghost = document.createElement("div");
+      ghost.className = "zoom-ghost";
+      ghost.style.left = `${fromRect.left}px`;
+      ghost.style.top = `${fromRect.top}px`;
+      ghost.style.width = `${fromRect.width}px`;
+      ghost.style.height = `${fromRect.height}px`;
+      document.body.appendChild(ghost);
+
+      switchLevel(nextLevel);
+      requestAnimationFrame(() => {
+        ghost.style.left = `${toRect.left}px`;
+        ghost.style.top = `${toRect.top}px`;
+        ghost.style.width = `${toRect.width}px`;
+        ghost.style.height = `${toRect.height}px`;
+      });
+
+      ghost.addEventListener("transitionend", () => ghost.remove(), { once: true });
+    }
+
+    function checkDevice() {
+      const isMobile = window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+      mobileBlock.classList.toggle("active", isMobile);
+    }
+
+    backBtn.addEventListener("click", zoomBack);
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        if (modal.classList.contains("active")) {
+          closeModal();
+        } else {
+          zoomBack();
+        }
+      }
+    });
+
+    window.addEventListener("resize", checkDevice);
+
+    renderL1();
+    checkDevice();
+  </script>
 </body>
 </html>
