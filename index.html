@@ -61,7 +61,8 @@
     }
 
     .stage {
-      width: min(72vw, calc(82vh * var(--map-ratio)));
+      width: min(90vw, calc(90vh * var(--map-ratio)), 1000px);
+      max-width: 1000px;
       aspect-ratio: var(--map-ratio);
       height: auto;
       position: relative;
@@ -156,22 +157,24 @@
       outline: 1px solid rgba(255, 0, 0, 0.4);
     }
 
-    .map-label {
+    .map-label,
+    .coordinate-text {
       position: absolute;
       left: 0;
       top: 0;
-      color: rgba(20, 20, 20, 0.9);
+      color: #111111;
       font-size: clamp(14px, 1.4vw, 30px);
       font-weight: 600;
       letter-spacing: 0.01em;
       white-space: nowrap;
       transform: translate3d(calc(-50% + var(--mx, 0px)), calc(-50% + var(--my, 0px)), 0);
+      opacity: var(--op, 0.6);
       will-change: transform;
-      transition: color 220ms ease-out;
+      transition: opacity 220ms ease-out;
     }
 
-    .map-label.muted {
-      color: rgba(20, 20, 20, 0.28);
+    .map-label.muted,
+    .coordinate-text.muted {
       font-weight: 500;
     }
 
@@ -388,7 +391,7 @@
 </head>
 <body>
   <div class="app">
-    <div class="desktop-block" id="mobileBlock">Please view this site on a Desktop for the best experience.</div>
+    <div class="desktop-block" id="mobileBlock">艺术体验仅限桌面端开启，请于电脑端访问 yuanyuanli.art</div>
     <button class="icon-btn" id="backBtn" type="button" aria-label="Back">←</button>
 
     <main class="stage" id="stage">
@@ -473,9 +476,9 @@
     const mapFrame = { x: 3.1, y: 17.8, w: 93.2, h: 69.4 };
     const DEBUG_HOTSPOTS = false;
     const DEBUG_REFERENCE = false;
-    const MAGNETIC_RADIUS = 120;
+    const MAGNETIC_RADIUS = 150;
     const MAGNETIC_MAX_SHIFT = 8;
-    const MAGNETIC_LERP = 0.18;
+    const MAGNETIC_LERP = 0.16;
 
     if (DEBUG_HOTSPOTS) document.body.classList.add("debug-hotspots");
     if (DEBUG_REFERENCE) document.body.classList.add("debug-reference");
@@ -599,12 +602,14 @@
       layout.forEach((item) => {
         const p = toLayerPoint(item);
         const el = document.createElement("span");
-        el.className = `map-label${p.muted ? " muted" : ""}`;
+        el.className = `map-label coordinate-text${p.muted ? " muted" : ""}`;
         el.dataset.mag = "1";
+        el.dataset.baseOpacity = p.muted ? "0.5" : "0.6";
         el.style.left = `${p.x.toFixed(3)}%`;
         el.style.top = `${p.y.toFixed(3)}%`;
+        el.style.setProperty("--op", el.dataset.baseOpacity);
         el.textContent = p.text;
-        magneticState.set(el, { x: 0, y: 0 });
+        magneticState.set(el, { x: 0, y: 0, o: Number(el.dataset.baseOpacity) });
         container.appendChild(el);
       });
     }
@@ -664,13 +669,20 @@
     function resetMagnetic() {
       const labels = document.querySelectorAll(".map-label[data-mag='1']");
       labels.forEach((el) => {
-        const m = magneticState.get(el) || { x: 0, y: 0 };
+        const baseOpacity = Number(el.dataset.baseOpacity || "0.6");
+        const m = magneticState.get(el) || { x: 0, y: 0, o: baseOpacity };
         m.x = 0;
         m.y = 0;
+        m.o = baseOpacity;
         magneticState.set(el, m);
         el.style.setProperty("--mx", "0px");
         el.style.setProperty("--my", "0px");
+        el.style.setProperty("--op", baseOpacity.toFixed(2));
       });
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
     }
 
     function animateMagnetic() {
@@ -688,20 +700,31 @@
         const dist = Math.hypot(dx, dy);
         let targetX = 0;
         let targetY = 0;
+        const baseOpacity = Number(el.dataset.baseOpacity || "0.6");
+        let targetOpacity = baseOpacity;
 
         if (pointer.active && dist < MAGNETIC_RADIUS && dist > 0.001) {
-          const strength = Math.pow(1 - dist / MAGNETIC_RADIUS, 1.4);
-          const shift = MAGNETIC_MAX_SHIFT * strength;
-          targetX = (dx / dist) * shift;
-          targetY = (dy / dist) * shift;
+          const proximity = 1 - dist / MAGNETIC_RADIUS;
+          const strength = proximity * 0.08;
+          targetX = dx * strength;
+          targetY = dy * strength;
+          const capped = Math.hypot(targetX, targetY);
+          if (capped > MAGNETIC_MAX_SHIFT) {
+            const k = MAGNETIC_MAX_SHIFT / capped;
+            targetX *= k;
+            targetY *= k;
+          }
+          targetOpacity = clamp(baseOpacity + proximity * (1 - baseOpacity), 0, 1);
         }
 
-        const m = magneticState.get(el) || { x: 0, y: 0 };
+        const m = magneticState.get(el) || { x: 0, y: 0, o: baseOpacity };
         m.x += (targetX - m.x) * MAGNETIC_LERP;
         m.y += (targetY - m.y) * MAGNETIC_LERP;
+        m.o += (targetOpacity - m.o) * MAGNETIC_LERP;
         magneticState.set(el, m);
         el.style.setProperty("--mx", `${m.x.toFixed(2)}px`);
         el.style.setProperty("--my", `${m.y.toFixed(2)}px`);
+        el.style.setProperty("--op", clamp(m.o, 0, 1).toFixed(2));
       });
       requestAnimationFrame(animateMagnetic);
     }
@@ -955,7 +978,7 @@
     }
 
     function checkDevice() {
-      const isMobile = window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+      const isMobile = window.innerWidth < 1024 || window.matchMedia("(pointer: coarse)").matches;
       mobileBlock.classList.toggle("active", isMobile);
       state.desktopInteractive = !isMobile;
       if (isMobile) {
@@ -977,13 +1000,16 @@
     });
 
     window.addEventListener("resize", checkDevice);
-    stage.addEventListener("mousemove", (event) => {
+    window.addEventListener("mousemove", (event) => {
       if (!state.desktopInteractive || state.level > 2) return;
       pointer.x = event.clientX;
       pointer.y = event.clientY;
       pointer.active = true;
     });
-    stage.addEventListener("mouseleave", () => {
+    document.addEventListener("mouseleave", () => {
+      pointer.active = false;
+    });
+    window.addEventListener("blur", () => {
       pointer.active = false;
     });
 
