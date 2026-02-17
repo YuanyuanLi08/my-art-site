@@ -12,10 +12,11 @@
       --bg: #ffffff;
       --ink: #111111;
       --gallery-w: min(84vw, 1260px);
-      --map-ratio: 1534 / 2048;
+      --map-ratio: 1 / 1;
       --dur: 420ms;
       --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
       --map-bg: url("./assets/map-bg.jpg");
+      --map-icon-bg: url("./assets/map-bg icon.jpg");
     }
 
     * {
@@ -97,6 +98,37 @@
       background-size: contain;
     }
 
+    .label-layer,
+    .reference-layer,
+    .hotspot-layer {
+      position: absolute;
+      inset: 0;
+    }
+
+    .label-layer {
+      pointer-events: none;
+      z-index: 8;
+    }
+
+    .reference-layer {
+      pointer-events: none;
+      z-index: 7;
+      background-image: var(--map-icon-bg);
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: contain;
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    body.debug-reference .reference-layer {
+      opacity: 0.32;
+    }
+
+    .hotspot-layer {
+      z-index: 12;
+    }
+
     #l1Map {
       background-image: var(--map-bg);
     }
@@ -122,6 +154,25 @@
     body.debug-hotspots .hotspot {
       background: rgba(255, 0, 0, 0.12);
       outline: 1px solid rgba(255, 0, 0, 0.4);
+    }
+
+    .map-label {
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: rgba(20, 20, 20, 0.9);
+      font-size: clamp(14px, 1.4vw, 30px);
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      transform: translate3d(calc(-50% + var(--mx, 0px)), calc(-50% + var(--my, 0px)), 0);
+      will-change: transform;
+      transition: color 220ms ease-out;
+    }
+
+    .map-label.muted {
+      color: rgba(20, 20, 20, 0.28);
+      font-weight: 500;
     }
 
     .icon-btn {
@@ -343,10 +394,16 @@
     <main class="stage" id="stage">
       <section class="view active" id="viewL1">
         <div class="map-layer" id="l1Map"></div>
+        <div class="reference-layer"></div>
+        <div class="label-layer" id="l1LabelLayer"></div>
+        <div class="hotspot-layer" id="l1HotspotLayer"></div>
       </section>
 
       <section class="view" id="viewL2">
         <div class="map-layer" id="l2Map"></div>
+        <div class="reference-layer"></div>
+        <div class="label-layer" id="l2LabelLayer"></div>
+        <div class="hotspot-layer" id="l2HotspotLayer"></div>
       </section>
 
       <section class="view" id="viewL3">
@@ -372,6 +429,7 @@
       selectedL2: null,
       l3Mode: "horizontal",
       hIndex: 1,
+      desktopInteractive: true,
       triggerRects: {
         2: null,
         3: null
@@ -385,6 +443,10 @@
     const viewL3 = document.getElementById("viewL3");
     const l1Map = document.getElementById("l1Map");
     const l2Map = document.getElementById("l2Map");
+    const l1LabelLayer = document.getElementById("l1LabelLayer");
+    const l2LabelLayer = document.getElementById("l2LabelLayer");
+    const l1HotspotLayer = document.getElementById("l1HotspotLayer");
+    const l2HotspotLayer = document.getElementById("l2HotspotLayer");
     const l3Panel = document.getElementById("l3Panel");
     const mobileBlock = document.getElementById("mobileBlock");
     const modal = document.getElementById("artModal");
@@ -410,8 +472,48 @@
     // x/y/w/h are percentages in the full source image.
     const mapFrame = { x: 3.1, y: 17.8, w: 93.2, h: 69.4 };
     const DEBUG_HOTSPOTS = false;
+    const DEBUG_REFERENCE = false;
+    const MAGNETIC_RADIUS = 120;
+    const MAGNETIC_MAX_SHIFT = 8;
+    const MAGNETIC_LERP = 0.18;
 
     if (DEBUG_HOTSPOTS) document.body.classList.add("debug-hotspots");
+    if (DEBUG_REFERENCE) document.body.classList.add("debug-reference");
+
+    const pointer = { x: 0, y: 0, active: false };
+    const magneticState = new WeakMap();
+
+    // L1 icon layer text: editable coordinate list (frame-relative percentages).
+    const l1TextLayout = [
+      { id: 1, text: "I..I", x: 14, y: 10.2, muted: false },
+      { id: 2, text: "I.II..I", x: 38, y: 20.4, muted: true },
+      { id: 3, text: "I.III..I", x: 62, y: 20.4, muted: true },
+      { id: 4, text: "II.III..I", x: 86, y: 20.4, muted: true },
+      { id: 5, text: "I.II..II", x: 45.5, y: 39.8, muted: true },
+      { id: 6, text: "II..I", x: 14, y: 39.8, muted: false },
+      { id: 7, text: "II..II", x: 38, y: 58.2, muted: true },
+      { id: 8, text: "III..II", x: 62, y: 58.2, muted: true },
+      { id: 9, text: "I.III..II", x: 86, y: 58.2, muted: false },
+      { id: 10, text: "I..III", x: 14, y: 78.8, muted: true },
+      { id: 11, text: "II..III", x: 38, y: 78.8, muted: true },
+      { id: 12, text: "II.III..III", x: 86, y: 78.8, muted: false }
+    ];
+
+    // L2 index layer text: editable coordinate list (frame-relative percentages).
+    const l2TextLayout = [
+      { id: 1, text: "1", x: 31.5, y: 11.4 },
+      { id: 2, text: "2", x: 50.5, y: 11.4 },
+      { id: 3, text: "3", x: 69.5, y: 11.4 },
+      { id: 4, text: "4", x: 83.8, y: 11.4 },
+      { id: 5, text: "5", x: 50.0, y: 28.2 },
+      { id: 6, text: "6", x: 15.5, y: 28.2 },
+      { id: 7, text: "7", x: 50.8, y: 45.0 },
+      { id: 8, text: "8", x: 69.8, y: 45.0 },
+      { id: 9, text: "9", x: 84.5, y: 45.0 },
+      { id: 10, text: "10", x: 30.2, y: 72.4 },
+      { id: 11, text: "11", x: 49.2, y: 72.4 },
+      { id: 12, text: "12", x: 69.2, y: 72.4 }
+    ];
 
     const seriesMap = Object.fromEntries(
       mapCells.map((cell, idx) => {
@@ -482,6 +584,31 @@
       };
     }
 
+    function toLayerPoint(point) {
+      return {
+        id: point.id,
+        text: point.text,
+        muted: Boolean(point.muted),
+        x: mapFrame.x + (point.x * mapFrame.w) / 100,
+        y: mapFrame.y + (point.y * mapFrame.h) / 100
+      };
+    }
+
+    function renderLabelLayer(container, layout) {
+      container.innerHTML = "";
+      layout.forEach((item) => {
+        const p = toLayerPoint(item);
+        const el = document.createElement("span");
+        el.className = `map-label${p.muted ? " muted" : ""}`;
+        el.dataset.mag = "1";
+        el.style.left = `${p.x.toFixed(3)}%`;
+        el.style.top = `${p.y.toFixed(3)}%`;
+        el.textContent = p.text;
+        magneticState.set(el, { x: 0, y: 0 });
+        container.appendChild(el);
+      });
+    }
+
     function addHotspot(container, config, onClick) {
       const tile = document.createElement("button");
       tile.className = "hotspot";
@@ -496,9 +623,10 @@
     }
 
     function renderL1() {
-      l1Map.innerHTML = "";
+      l1HotspotLayer.innerHTML = "";
+      renderLabelLayer(l1LabelLayer, l1TextLayout);
       mapCells.forEach((cell) => {
-        addHotspot(l1Map, toLayerRect(cell), (tile) => {
+        addHotspot(l1HotspotLayer, toLayerRect(cell), (tile) => {
           state.selectedL1 = cell.id;
           state.triggerRects[2] = tile.getBoundingClientRect();
           renderL2(cell.id);
@@ -508,12 +636,13 @@
     }
 
     function renderL2(groupId) {
-      l2Map.innerHTML = "";
+      l2HotspotLayer.innerHTML = "";
+      renderLabelLayer(l2LabelLayer, l2TextLayout);
       const data = seriesMap[groupId];
       mapCells.forEach((cell) => {
         const entry = data.index[(cell.id - 1) % data.index.length];
         addHotspot(
-          l2Map,
+          l2HotspotLayer,
           toLayerRect(cell),
           (tile) => {
             state.selectedL2 = entry.id;
@@ -524,6 +653,57 @@
           }
         );
       });
+    }
+
+    function getActiveLabels() {
+      if (state.level === 1) return l1LabelLayer.querySelectorAll(".map-label[data-mag='1']");
+      if (state.level === 2) return l2LabelLayer.querySelectorAll(".map-label[data-mag='1']");
+      return [];
+    }
+
+    function resetMagnetic() {
+      const labels = document.querySelectorAll(".map-label[data-mag='1']");
+      labels.forEach((el) => {
+        const m = magneticState.get(el) || { x: 0, y: 0 };
+        m.x = 0;
+        m.y = 0;
+        magneticState.set(el, m);
+        el.style.setProperty("--mx", "0px");
+        el.style.setProperty("--my", "0px");
+      });
+    }
+
+    function animateMagnetic() {
+      if (!state.desktopInteractive) {
+        requestAnimationFrame(animateMagnetic);
+        return;
+      }
+      const labels = getActiveLabels();
+      labels.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = pointer.x - cx;
+        const dy = pointer.y - cy;
+        const dist = Math.hypot(dx, dy);
+        let targetX = 0;
+        let targetY = 0;
+
+        if (pointer.active && dist < MAGNETIC_RADIUS && dist > 0.001) {
+          const strength = Math.pow(1 - dist / MAGNETIC_RADIUS, 1.4);
+          const shift = MAGNETIC_MAX_SHIFT * strength;
+          targetX = (dx / dist) * shift;
+          targetY = (dy / dist) * shift;
+        }
+
+        const m = magneticState.get(el) || { x: 0, y: 0 };
+        m.x += (targetX - m.x) * MAGNETIC_LERP;
+        m.y += (targetY - m.y) * MAGNETIC_LERP;
+        magneticState.set(el, m);
+        el.style.setProperty("--mx", `${m.x.toFixed(2)}px`);
+        el.style.setProperty("--my", `${m.y.toFixed(2)}px`);
+      });
+      requestAnimationFrame(animateMagnetic);
     }
 
     function mediaPreview(work) {
@@ -700,6 +880,10 @@
         view.classList.toggle("active", index + 1 === level);
       });
       backBtn.classList.toggle("visible", level > 1);
+      if (level > 2) {
+        pointer.active = false;
+        resetMagnetic();
+      }
     }
 
     function getTargetRect(level) {
@@ -773,6 +957,11 @@
     function checkDevice() {
       const isMobile = window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
       mobileBlock.classList.toggle("active", isMobile);
+      state.desktopInteractive = !isMobile;
+      if (isMobile) {
+        pointer.active = false;
+        resetMagnetic();
+      }
     }
 
     backBtn.addEventListener("click", zoomBack);
@@ -788,9 +977,19 @@
     });
 
     window.addEventListener("resize", checkDevice);
+    stage.addEventListener("mousemove", (event) => {
+      if (!state.desktopInteractive || state.level > 2) return;
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+      pointer.active = true;
+    });
+    stage.addEventListener("mouseleave", () => {
+      pointer.active = false;
+    });
 
     renderL1();
     checkDevice();
+    animateMagnetic();
   </script>
 </body>
 </html>
