@@ -24,7 +24,7 @@
       --map-ratio: 1 / 1;
       --dur: 420ms;
       --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-      --map-bg: url("./assets/map-bg.jpg");
+      --map-bg: url("./assets/map-bg icon.jpg");
       --map-icon-bg: url("./assets/map-bg icon.jpg");
       --label-idle: #d1d1d1;
       --label-idle-muted: #e0e0e0;
@@ -499,6 +499,7 @@
     const mapFrame = { x: 3.1, y: 17.8, w: 93.2, h: 69.4 };
     const DEBUG_HOTSPOTS = false;
     const DEBUG_REFERENCE = false;
+    const USE_IMAGE_EMBEDDED_LABELS = true;
     const MAGNETIC_RADIUS = 150;
     const MAGNETIC_MAX_SHIFT = 8;
     const MAGNETIC_LERP = 0.16;
@@ -652,7 +653,11 @@
 
     function renderL1() {
       l1HotspotLayer.innerHTML = "";
-      renderLabelLayer(l1LabelLayer, l1TextLayout);
+      if (USE_IMAGE_EMBEDDED_LABELS) {
+        l1LabelLayer.innerHTML = "";
+      } else {
+        renderLabelLayer(l1LabelLayer, l1TextLayout);
+      }
       mapCells.forEach((cell) => {
         addHotspot(l1HotspotLayer, toLayerRect(cell), (tile) => {
           state.selectedL1 = cell.id;
@@ -665,7 +670,11 @@
 
     function renderL2(groupId) {
       l2HotspotLayer.innerHTML = "";
-      renderLabelLayer(l2LabelLayer, l2TextLayout);
+      if (USE_IMAGE_EMBEDDED_LABELS) {
+        l2LabelLayer.innerHTML = "";
+      } else {
+        renderLabelLayer(l2LabelLayer, l2TextLayout);
+      }
       const data = seriesMap[groupId];
       mapCells.forEach((cell) => {
         const entry = data.index[(cell.id - 1) % data.index.length];
